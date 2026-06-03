@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: retail-config
+  namespace: retail-intel
+data:
+  STORE_ID: "STORE_BLR_002"
+  KAFKA_BROKERS: "kafka:9092"
+  REDIS_URL: "redis://redis:6379/0"
+  POSTGRES_DSN: "postgres://retail:retail@postgres:5432/retail_intel?sslmode=disable"
+  CAMERA_ID: "CAM_ENTRY_01"
+  VIDEO_SOURCE: "/data/sample_retail.mp4"

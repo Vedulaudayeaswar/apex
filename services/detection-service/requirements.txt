@@ -1,0 +1,12 @@
+# torch/torchvision: installed in Dockerfile (CPU wheels only)
+ultralytics>=8.1.0
+opencv-python-headless>=4.9.0
+numpy>=1.26.0
+kafka-python>=2.0.2
+redis>=5.0.0
+flask>=3.0.0
+flask-cors>=4.0.0
+Pillow>=10.2.0
+scipy>=1.12.0
+python-dotenv>=1.0.0
+prometheus-client>=0.20.0

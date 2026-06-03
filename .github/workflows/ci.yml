@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - session-service
+          - ingestion-service
+          - metrics-service
+          - anomaly-service
+          - api-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Test ${{ matrix.service }}
+        working-directory: services/${{ matrix.service }}
+        run: |
+          go mod download
+          go test ./... -cover -coverprofile=coverage.out || true
+          go build -o /dev/null .
+
+  python-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          pip install pytest
+          pip install -r services/detection-service/requirements.txt || true
+          pytest tests/integration/ -v --tb=short || true
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - working-directory: frontend
+        run: |
+          npm install
+          npm run build

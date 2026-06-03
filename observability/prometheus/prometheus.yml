@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: api-gateway
+    static_configs:
+      - targets: ["api-gateway:8080"]
+    metrics_path: /metrics
+
+  - job_name: session-service
+    static_configs:
+      - targets: ["session-service:8081"]
+
+  - job_name: ingestion-service
+    static_configs:
+      - targets: ["ingestion-service:8082"]
+
+  - job_name: metrics-service
+    static_configs:
+      - targets: ["metrics-service:8083"]
+
+  - job_name: anomaly-service
+    static_configs:
+      - targets: ["anomaly-service:8084"]
+
+  - job_name: detection-service
+    static_configs:
+      - targets: ["detection-service:8090"]

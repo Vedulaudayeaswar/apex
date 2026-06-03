@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.exe
+*.mp4
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+coverage.out
+go.sum.bak
+.DS_Store
+data/uploads/

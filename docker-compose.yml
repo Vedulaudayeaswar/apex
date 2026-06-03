@@ -1,0 +1,221 @@
+x-go-env: &go-env
+  KAFKA_BROKERS: kafka:29092
+  REDIS_URL: redis://redis:6379/0
+  POSTGRES_DSN: postgres://retail:retail@postgres:5432/retail_intel?sslmode=disable
+  STORE_ID: STORE_BLR_002
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    networks: [retail-net]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on: [zookeeper]
+    restart: on-failure
+    ports: ["9092:9092"]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "cub kafka-ready -b localhost:29092 1 5 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 18
+    networks: [retail-net]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    networks: [retail-net]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: retail
+      POSTGRES_PASSWORD: retail
+      POSTGRES_DB: retail_intel
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql
+    networks: [retail-net]
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        for t in raw-detections store-events session-events metrics-events anomaly-events dashboard-events; do
+          kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic $$t --partitions 3 --replication-factor 1
+        done
+        echo "Kafka topics ready"
+    networks: [retail-net]
+
+  session-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.go
+      args:
+        SERVICE_PATH: services/session-service
+    environment:
+      <<: *go-env
+      HTTP_PORT: "8081"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
+    ports: ["8081:8081"]
+    networks: [retail-net]
+
+  ingestion-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.go
+      args:
+        SERVICE_PATH: services/ingestion-service
+    environment:
+      <<: *go-env
+      HTTP_PORT: "8082"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
+    ports: ["8082:8082"]
+    networks: [retail-net]
+
+  metrics-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.go
+      args:
+        SERVICE_PATH: services/metrics-service
+    environment:
+      <<: *go-env
+      HTTP_PORT: "8083"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
+    ports: ["8083:8083"]
+    networks: [retail-net]
+
+  anomaly-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.go
+      args:
+        SERVICE_PATH: services/anomaly-service
+    environment:
+      <<: *go-env
+      HTTP_PORT: "8084"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
+    ports: ["8084:8084"]
+    networks: [retail-net]
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.go
+      args:
+        SERVICE_PATH: services/api-gateway
+    environment:
+      <<: *go-env
+      HTTP_PORT: "8080"
+      DETECTION_URL: http://detection-service:8090
+    depends_on: [kafka, redis, session-service]
+    ports: ["8080:8080"]
+    networks: [retail-net]
+
+  detection-service:
+    build:
+      context: ./services/detection-service
+      dockerfile: Dockerfile
+    environment:
+      KAFKA_BROKERS: kafka:29092
+      REDIS_URL: redis://redis:6379/0
+      STORE_ID: STORE_BLR_002
+      CAMERA_ID: CAM_ENTRY_01
+      VIDEO_SOURCE: /data/sample_retail.mp4
+      HTTP_PORT: "8090"
+      INFERENCE_SIZE: "320"
+      INFERENCE_FRAME_INTERVAL: "5"
+      EVENT_INTERVAL_SEC: "1.0"
+      STREAM_FPS: "10"
+      STREAM_WIDTH: "1280"
+      MAX_VIDEO_FPS: "15"
+      TORCH_NUM_THREADS: "2"
+    volumes:
+      - ./data:/data
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    ports: ["8090:8090"]
+    networks: [retail-net]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_URL: http://localhost:8080
+      VITE_WS_URL: ws://localhost:8080/ws
+      VITE_STREAM_URL: http://localhost:8090/stream
+    ports: ["3000:80"]
+    depends_on: [api-gateway, detection-service]
+    networks: [retail-net]
+
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports: ["9091:9090"]
+    networks: [retail-net]
+
+  grafana:
+    image: grafana/grafana:10.3.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning
+    ports: ["3001:3000"]
+    depends_on: [prometheus]
+    networks: [retail-net]
+
+networks:
+  retail-net:
+
+volumes:
+  pgdata:
