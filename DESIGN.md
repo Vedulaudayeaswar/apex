@@ -66,7 +66,7 @@ The AI Retail Store Intelligence Platform is a real-time computer vision system 
 **Why**:
 
 - **Single Topic**: Simplifies consumer logic; all downstream services consume from one stream
-- **Enum event_type**: ENTRY, EXIT, ZONE_ENTER, ZONE_EXIT, ZONE_DWELL, QUEUE_JOIN, QUEUE_ABANDON, REENTRY, ANOMALY
+- **Enum event_type**: ENTRY, EXIT, ZONE_ENTER, ZONE_EXIT, QUEUE_JOIN, QUEUE_LEAVE, REENTRY, DETECTION, ANOMALY
 - **Metadata Bag**: Flexible key-value store for future extensibility (queue_depth, session_seq, movement_pattern, etc.)
 
 **AI Input** (Claude Haiku 4.5):

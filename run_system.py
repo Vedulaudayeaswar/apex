@@ -50,7 +50,40 @@ def compose_up(build: bool = True) -> None:
     cmd = ["docker", "compose", "-f", str(COMPOSE_FILE), "up", "-d"]
     if build:
         cmd.append("--build")
-    run(cmd)
+    try:
+        run(cmd)
+    except subprocess.CalledProcessError as exc:
+        print("Compose startup failed once; waiting for Kafka health before retrying...")
+        if not wait_for_compose_service("kafka", timeout=90):
+            raise exc
+        run(cmd)
+
+
+def wait_for_compose_service(service: str, timeout: int = 90) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        result = subprocess.run(
+            [
+                "docker", "compose", "-f", str(COMPOSE_FILE),
+                "ps", "--format", "json", service,
+            ],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            check=False,
+        )
+        for line in result.stdout.splitlines():
+            try:
+                status = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            health = str(status.get("Health", "")).lower()
+            state = str(status.get("State", "")).lower()
+            if health == "healthy" or (not health and state == "running"):
+                print(f"{service} is ready; retrying Compose startup.")
+                return True
+        time.sleep(3)
+    return False
 
 
 def wait_kafka(timeout: int = 240) -> bool:

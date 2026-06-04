@@ -34,6 +34,15 @@ open http://localhost:3000
 - Real-time visitor count, queue depth, conversion funnel
 - Zone heatmap and anomaly feed
 
+## Submission Deliverables
+
+Mandatory challenge artifacts are included at the repository root unless noted:
+
+- `README.md` - setup, architecture, API, and testing guide
+- `DESIGN.md` - system design plus AI-Assisted Design Decisions
+- `CHOICES.md` - model selection, schema design, and API architecture decisions
+- `data/events.jsonl` - valid JSONL event log following `shared/events/schema.json`
+
 To clean up:
 
 ```bash
